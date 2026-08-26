@@ -1,0 +1,32 @@
+{
+  "name": "@yottameta/yotta-humanize",
+  "version": "0.1.0",
+  "description": "元真 —— 去 AI 味的中文写作编辑技能：检测器引擎（24 类 + 词表 + 统计突发性）识别并改写 AI 腔文本，让中文写作更自然。触发：编辑/润色文本、去掉 AI 味、让文案更像人写时。边界：只处理文本，不生成新内容。",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "yotta-humanize"
+  ],
+  "files": [
+    "SKILL.md",
+    "LICENSE",
+    "README.md",
+    "install.sh",
+    "references",
+    "scripts",
+    "assets",
+    "bin",
+    "NOTICE",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YottaMeta/yotta-humanize.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "yotta-humanize": "bin/install.js"
+  }
+}
