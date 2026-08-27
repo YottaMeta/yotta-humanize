@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.1.1 (2026-08-28)
+
+中英双语 README 对齐（老张拍板「英文门面 + 中文全档」）：
+
+- **README.md 改为英文**：作为 GitHub / npm / ClawHub 首页的英文门面（翻译 + 精简，覆盖定位 / 核心价值 / 命令 / 快速使用 / 安装 / 使用示例 / 边界 / 开发校验全流程）。
+- **新增 README.zh-CN.md**：原中文完整主文档整体平移，顶部加语言切换链接。
+- **package.json**：description 改英文；files 加 README.zh-CN.md；版本 0.1.0 → 0.1.1。
+- 版本四处对齐：package.json / SKILL frontmatter / 引擎 VERSION / 文档。
+- 边界（B 方案）：references / CHANGELOG / 测试注释不翻译；SKILL 触发描述保持中文。
+
 ## v0.1.0 (2026-08-26)
 
 YottaMeta 自有实现首版（去 AI 味方向参考开源社区 humanizer / ai-humanizer 类技能思路，已完全重写为中文语料实现，零依赖、无上游代码）：
