@@ -11,3 +11,6 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+
+# .github/workflows 不入库（PAT 无 workflow scope，2026-08-29 续17 追加）
+.github/workflows/

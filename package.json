@@ -1,6 +1,6 @@
 {
   "name": "@yottameta/yotta-humanize",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Yuanzhen (元真) — AI-flavor remover for Chinese writing: a detector engine (24 rule classes + wordlists + statistical burstiness) that identifies and rewrites AI-typical Chinese text to make it read more naturally. Triggers when editing/polishing text, removing AI flavor, or making copy read more human. Boundaries: text-only, deterministic rewrites, no model dependency.",
   "license": "MIT",
   "keywords": [
