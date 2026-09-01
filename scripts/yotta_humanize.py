@@ -47,7 +47,7 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 import humanize_rules as HR  # noqa: E402
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 TOOL_NAME = "yotta-humanize"
 TOOL_CN = "元真"
 DEFAULT_THRESHOLD = 45
@@ -515,8 +515,13 @@ def _read_text(args):
     if getattr(args, "file", None):
         p = Path(args.file)
         if not p.exists():
-            raise SystemExit("文件不存在：%s" % p)
-        return p.read_text(encoding="utf-8")
+            raise SystemExit("文件不存在：%s\n修复建议：请检查文件路径是否正确、文件名是否拼错。" % p)
+        try:
+            return p.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            raise SystemExit("无法读取文件：%s 不是 UTF-8 编码\n修复建议：请把文件另存为 UTF-8 编码后重试（记事本 → 另存为 → 编码选 UTF-8）。" % p)
+        except OSError as e:
+            raise SystemExit("无法读取文件：%s（%s）\n修复建议：请检查文件是否存在、是否有读取权限。" % (p, e))
     if getattr(args, "stdin", False):
         return _read_stdin()
     if getattr(args, "text", None):
@@ -621,7 +626,7 @@ def main(argv=None):
                 print(res["text"])
             return 0
     except Exception as e:  # noqa: BLE001
-        print("错误：%s" % e, file=sys.stderr)
+        print("错误：%s\n修复建议：请检查输入是否为 UTF-8 编码、文件是否存在；若仍报错，请把上面的错误信息反馈给开发者。" % e, file=sys.stderr)
         return 4
     return 4
 

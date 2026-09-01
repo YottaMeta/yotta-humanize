@@ -141,6 +141,40 @@ bash install.sh --list           # list agents -> default directories
 - **Rewrites are suggestions** — unambiguous transforms apply directly; judgment-heavy rewrites are listed as suggestions for the human to confirm.
 - **No model dependency** — deterministic rules only; results are reproducible and explainable.
 
+## Before / after
+
+**Input** (typical AI-flavored Chinese):
+
+```text
+赋能业务增长，打造闭环生态，提升用户体验，实现价值最大化。
+```
+
+**Output** (deterministic `rewrite`, illustrative):
+
+```text
+帮业务更快增长，把流程走通，让用户用得顺手，做出实实在在的价值。
+```
+
+Score before 68/100 → after 23/100; `rewrite` also prints a fix list (what changed and how many times).
+
+## Errors
+
+- Exit codes: **0** success; **1** `--gate` hit (CI block); **4** input error (missing file, no input).
+- Missing file / non-UTF-8 encoding / permission errors show a **Chinese fix suggestion** instead of a raw English stack trace.
+- FAQ and pitfalls: [references/faq.md](references/faq.md).
+
+## FAQ (quick reference)
+
+| Question | Answer (see references/faq.md) |
+|---|---|
+| How to pass text? | `-f file` / `--stdin` / positional text |
+| File not UTF-8? | Re-save as UTF-8 and retry |
+| Long text? | Process in segments; nested cases may need human review |
+| Small change after rewrite? | Low AI flavor; run analyze to see hits, suggest for polish |
+| rewrite vs suggest? | rewrite applies mechanically; suggest gives manual-polish advice |
+| CI gate? | `--gate --threshold 40`, exit 1 on hit |
+| Will it corrupt my text? | Deterministic replacements + fix list + before/after score |
+
 ## Development & validation
 
 - Tests: python scripts/test_yotta_humanize.py (155 tests; Windows: python)
