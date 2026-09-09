@@ -1,51 +1,97 @@
 #!/usr/bin/env node
 /**
- * yotta-humanize 跨平台安装器（YottaSkills）
- * 用法:
- *   npx -y @yottameta/yotta-humanize --agent <name>  # 按智能体默认用户级目录安装（推荐）
- *   npx -y @yottameta/yotta-humanize --dir PATH      # 装到指定目录（用户改了目录的智能体）
- *   npx -y @yottameta/yotta-humanize -g              # 安装到全部已知智能体用户级目录
- *   npx -y @yottameta/yotta-humanize                 # 安装到检测到的项目级目录
- *   npx -y @yottameta/yotta-humanize --list          # 列出智能体 -> 默认目录
+ * @yottameta/yotta-humanize cross-platform installer.
+ *
+ * Usage:
+ *   npx -y @yottameta/yotta-humanize --agent <name>
+ *   npx -y @yottameta/yotta-humanize --dir <path>
+ *   npx -y @yottameta/yotta-humanize -g
+ *   npx -y @yottameta/yotta-humanize
+ *   npx -y @yottameta/yotta-humanize --list
  */
 'use strict';
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
 const SKILL_NAME = 'yotta-humanize';
 const PKG_ROOT = path.join(__dirname, '..');
+const COPY_SKIP = new Set(['package.json', 'bin', 'node_modules', '.git', '.github', 'test']);
 
-// 智能体 -> 用户级默认技能目录（dirs 按优先级排列；--agent 装到第一个）
-// 依据官方文档：.agents/skills 并非通用目录，被 OpenCode / Cursor / Cline / Amp /
-// Kimi / Gemini CLI / GitHub Copilot 等读取；Claude Code 与 Codex 默认不读 .agents。
 const AGENT_DIRS = {
   claude:    { label: 'Claude Code',      dirs: ['.claude/skills'] },
   cursor:    { label: 'Cursor',           dirs: ['.cursor/skills', '.agents/skills'] },
-  codex:     { label: 'Codex',            dirs: ['.codex/skills'] }, // 特判：$CODEX_HOME/skills
+  codex:     { label: 'Codex',            dirs: ['.codex/skills'] },
   gemini:    { label: 'Gemini CLI',       dirs: ['.gemini/skills', '.agents/skills'] },
   goose:     { label: 'Goose',            dirs: ['.config/goose/skills', '.agents/skills'] },
   amp:       { label: 'Amp',              dirs: ['.config/agents/skills', '.agents/skills'] },
-  opencode:  { label: 'OpenCode',         dirs: ['.config/opencode/skills'] }, // 特判：$XDG_CONFIG_HOME
+  opencode:  { label: 'OpenCode',         dirs: ['.config/opencode/skills'] },
   windsurf:  { label: 'Windsurf',         dirs: ['.codeium/windsurf/skills'] },
   workbuddy: { label: 'WorkBuddy',        dirs: ['.workbuddy/skills'] },
   kiro:      { label: 'Kiro',             dirs: ['.kiro/skills'] },
   trae:      { label: 'Trae Code CLI',    dirs: ['.traecli/skills'] },
-  'trae-cn': { label: 'Trae IDE（国内）',  dirs: ['.trae-cn/skills'] },
+  'trae-cn': { label: 'Trae IDE',         dirs: ['.trae-cn/skills'] },
   qwen:      { label: 'Qwen Code',        dirs: ['.qwen/skills'] },
-  comate:    { label: 'Comate 文心快码',   dirs: ['.comate/skills'] },
+  comate:    { label: 'Comate',           dirs: ['.comate/skills'] },
   codebuddy: { label: 'CodeBuddy Code',   dirs: ['.codebuddy/skills'] },
   kimi:      { label: 'Kimi Code CLI',    dirs: ['.kimi/skills'] },
-  agents:    { label: '通用 AGENTS.md',    dirs: ['.agents/skills'] },
+  agents:    { label: 'Generic AGENTS.md', dirs: ['.agents/skills'] },
 };
 
-// Codex 用户级目录特判：优先 $CODEX_HOME/skills，否则 ~/.codex/skills
+class UsageError extends Error {}
+class TargetError extends Error {}
+class InstallError extends Error {}
+
+function usage() {
+  console.log('yotta-humanize installer');
+  console.log('');
+  console.log('Usage:');
+  console.log('  npx -y @yottameta/yotta-humanize --agent <name>  Install to an agent default directory');
+  console.log('  npx -y @yottameta/yotta-humanize --dir <path>     Install to a custom directory');
+  console.log('  npx -y @yottameta/yotta-humanize -g               Install to all known agent directories');
+  console.log('  npx -y @yottameta/yotta-humanize                  Auto-detect project-level directories');
+  console.log('  npx -y @yottameta/yotta-humanize --list           List supported agent directories');
+  console.log('');
+  console.log('Options:');
+  console.log('  --agent <name>  Agent key, see --list');
+  console.log('  --dir <path>    Custom skills directory');
+  console.log('  -g, --global    Install to all known user-level directories');
+  console.log('  --list, -l      List supported agents');
+  console.log('  -h, --help      Show this help');
+}
+
+function parseArgs(argv) {
+  const opts = { help: false, list: false, global: false, dir: null, agent: null };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--help' || arg === '-h') opts.help = true;
+    else if (arg === '--list' || arg === '-l') opts.list = true;
+    else if (arg === '--global' || arg === '-g') opts.global = true;
+    else if (arg === '--dir') {
+      const value = argv[++i];
+      if (!value) throw new UsageError('--dir requires a non-empty path');
+      opts.dir = value;
+    } else if (arg === '--agent') {
+      const value = argv[++i];
+      if (!value) throw new UsageError('--agent requires a non-empty name');
+      opts.agent = value.toLowerCase();
+    } else {
+      throw new UsageError('Unknown argument: ' + arg);
+    }
+  }
+  if (!opts.help) {
+    const selected = [opts.dir, opts.agent, opts.global].filter(Boolean).length;
+    if (selected > 1) throw new UsageError('Use only one of --dir, --agent, or -g');
+  }
+  return opts;
+}
+
 function codexUserDir() {
   const base = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
   return path.join(base, 'skills');
 }
 
-// OpenCode 用户级目录特判：优先 $XDG_CONFIG_HOME/opencode/skills，否则 ~/.config/opencode/skills
 function opencodeUserDir() {
   const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
   return path.join(base, 'opencode', 'skills');
@@ -57,82 +103,65 @@ function resolveUserDir(rel) {
   return path.join(os.homedir(), rel);
 }
 
-function installTo(dest) {
-  const target = path.join(dest, SKILL_NAME);
-  fs.mkdirSync(target, { recursive: true });
-  copyDir(PKG_ROOT, target, new Set(['package.json', 'bin', 'node_modules', '.git']));
-  console.log('installed -> ' + target);
-}
-
-function copyDir(src, dst, skip) {
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    if (skip.has(entry.name)) continue;
-    const s = path.join(src, entry.name);
-    const d = path.join(dst, entry.name);
-    if (entry.isDirectory()) {
-      fs.mkdirSync(d, { recursive: true });
-      copyDir(s, d, skip);
-    } else if (entry.isFile()) {
-      fs.copyFileSync(s, d);
-    }
-  }
-}
-
 function displayDir(rel) {
   if (process.platform === 'win32') return '%USERPROFILE%\\' + rel.replace(/\//g, '\\');
   return '~/' + rel;
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  const isGlobal = args.includes('-g') || args.includes('--global');
-  const list = args.includes('--list') || args.includes('-l');
-  let explicitDir = null;
-  const di = args.indexOf('--dir');
-  if (di !== -1 && args[di + 1]) explicitDir = args[di + 1];
-  let agent = null;
-  const ai = args.indexOf('--agent');
-  if (ai !== -1 && args[ai + 1]) agent = String(args[ai + 1]).toLowerCase();
-
-  if (list) {
-    console.log('智能体 -> 默认技能目录（--agent <name> 装到第一个，用户级）:');
-    for (const [key, v] of Object.entries(AGENT_DIRS)) {
-      const resolved = v.dirs.map(displayDir);
-      console.log('  ' + key.padEnd(10) + v.label.padEnd(18) + resolved.join('、'));
-    }
-    console.log('\n说明：Windows 用 %USERPROFILE%，Linux/macOS 用 ~；仅收录有官方默认目录的智能体。');
-    console.log('改了目录的请用 --dir <路径>，不要依赖默认位置；若设置了 CODEX_HOME / XDG_CONFIG_HOME，安装自动以该变量为准。');
-    return;
+function printList() {
+  console.log('Agent -> default skill directory:');
+  for (const [key, value] of Object.entries(AGENT_DIRS)) {
+    console.log('  ' + key.padEnd(12) + value.label.padEnd(20) + value.dirs.map(displayDir).join(', '));
   }
+  console.log('');
+  console.log('Use --dir <path> for agents not listed. CODEX_HOME and XDG_CONFIG_HOME are respected.');
+}
 
-  if (explicitDir) { installTo(explicitDir); return; }
-
-  if (agent) {
-    const info = AGENT_DIRS[agent];
-    if (!info) {
-      console.log('未收录智能体: ' + agent + '。请用 --dir <路径> 指定技能目录。');
-      console.log('可用: ' + Object.keys(AGENT_DIRS).join(', '));
-      return;
-    }
-    installTo(resolveUserDir(info.dirs[0]));
-    console.log('完成。');
-    return;
+function assertSafeTarget(target) {
+  const rel = path.relative(PKG_ROOT, target);
+  if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+    throw new UsageError('Target directory must be outside the skill source directory');
   }
+}
 
-  if (isGlobal) {
-    const seen = new Set();
-    for (const v of Object.values(AGENT_DIRS)) {
-      for (const d of v.dirs) {
-        if (seen.has(d)) continue;
-        seen.add(d);
-        installTo(resolveUserDir(d));
+function copyDir(src, dst, skip) {
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (skip.has(entry.name)) continue;
+    const from = path.join(src, entry.name);
+    const to = path.join(dst, entry.name);
+    try {
+      if (entry.isDirectory()) {
+        fs.mkdirSync(to, { recursive: true });
+        copyDir(from, to, skip);
+      } else if (entry.isFile()) {
+        fs.copyFileSync(from, to);
       }
+    } catch (err) {
+      throw new InstallError('Failed to copy ' + from + ' -> ' + to + ': ' + err.message);
     }
-    console.log('完成。');
-    return;
   }
+}
 
-  const PROJECT_DIRS = [
+function installTo(dest) {
+  if (!dest || typeof dest !== 'string') throw new UsageError('Destination directory is required');
+  const target = path.resolve(dest, SKILL_NAME);
+  assertSafeTarget(target);
+  try {
+    fs.mkdirSync(target, { recursive: true });
+    copyDir(PKG_ROOT, target, COPY_SKIP);
+    if (!fs.existsSync(path.join(target, 'SKILL.md'))) {
+      throw new InstallError('Installed directory is missing SKILL.md');
+    }
+  } catch (err) {
+    if (err instanceof UsageError || err instanceof InstallError) throw err;
+    throw new InstallError('Cannot install to ' + target + ': ' + err.message);
+  }
+  console.log('installed -> ' + target);
+  return target;
+}
+
+function projectDirs() {
+  return [
     '.claude/skills',
     '.cursor/skills',
     '.codex/skills',
@@ -150,13 +179,66 @@ function main() {
     '.codebuddy/skills',
     '.kimi/skills',
     '.agents/skills',
-  ];
-  let installedAny = false;
-  for (const d of PROJECT_DIRS) {
-    if (fs.existsSync(d)) { installTo(d); installedAny = true; }
+  ].filter((dir) => fs.existsSync(dir));
+}
+
+function run() {
+  const opts = parseArgs(process.argv.slice(2));
+  if (opts.help) { usage(); return; }
+  if (opts.list) { printList(); return; }
+
+  if (opts.dir) { installTo(opts.dir); return; }
+
+  if (opts.agent) {
+    const info = AGENT_DIRS[opts.agent];
+    if (!info) {
+      throw new UsageError('Unknown agent: ' + opts.agent + '. Available: ' + Object.keys(AGENT_DIRS).join(', ') + '. Use --dir for a custom directory.');
+    }
+    installTo(resolveUserDir(info.dirs[0]));
+    return;
   }
-  if (!installedAny) {
-    console.log('未检测到项目级智能体目录。可手动复制，或用 --agent <name> / -g 装到用户级。');
+
+  if (opts.global) {
+    const seen = new Set();
+    let count = 0;
+    for (const value of Object.values(AGENT_DIRS)) {
+      for (const dir of value.dirs) {
+        if (seen.has(dir)) continue;
+        seen.add(dir);
+        installTo(resolveUserDir(dir));
+        count++;
+      }
+    }
+    console.log('Installed to ' + count + ' directories.');
+    return;
+  }
+
+  const dirs = projectDirs();
+  if (!dirs.length) {
+    throw new TargetError('No project-level agent directory detected. Use --agent <name> or --dir <path>.');
+  }
+  for (const dir of dirs) installTo(dir);
+}
+
+function main() {
+  try {
+    run();
+  } catch (err) {
+    if (err instanceof UsageError) {
+      console.error('Usage error: ' + err.message);
+      usage();
+      process.exitCode = 2;
+    } else if (err instanceof TargetError) {
+      console.error('Target error: ' + err.message);
+      process.exitCode = 4;
+    } else if (err instanceof InstallError) {
+      console.error('Install failed: ' + err.message);
+      console.error('Fix: check directory permissions and free space, then retry. Use --dir to choose another directory.');
+      process.exitCode = 1;
+    } else {
+      console.error('Unexpected error: ' + (err && err.message ? err.message : String(err)));
+      process.exitCode = 1;
+    }
   }
 }
 

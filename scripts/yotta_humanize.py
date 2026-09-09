@@ -47,7 +47,7 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 import humanize_rules as HR  # noqa: E402
 
-VERSION = "0.1.3"
+VERSION = "0.2.0"
 TOOL_NAME = "yotta-humanize"
 TOOL_CN = "元真"
 DEFAULT_THRESHOLD = 45

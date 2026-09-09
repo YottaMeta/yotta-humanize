@@ -1,6 +1,6 @@
 ---
 name: yotta-humanize
-version: 0.1.3
+version: 0.2.0
 description: 元真 —— 去 AI 味的中文写作编辑技能：检测器引擎（24 类规则 + 词表 + 统计突发性）识别并改写 AI 腔文本，让中文写作更自然、更像人写的。触发：编辑 / 润色文本、去 AI 味、让文章 / 文案 / 回复更像人写、发现文本充斥着 AI 常用词与句式（赋能 / 闭环 / 值得注意的是 / 综上所述 / 希望对你有所帮助 等）、给 AI 生成的中文稿件做检测与改写。边界：只处理文本，不生成新内容；不改写事实 / 数据 / 专有名词；不破坏作者原意；改写为确定性规则，不依赖模型。
 license: MIT
 ---
@@ -73,6 +73,12 @@ python3 scripts/yotta_humanize.py score -f article.md --gate --threshold 45
 - references/patterns.md — 24 类规则目录与命中示例
 - references/scoring.md — 评分公式与统计量说明
 - references/rewriting.md — 确定性改写规则与 CLI 协议
+- references/faq.md — 常见问题速查（输入 / 结果 / 触发 / 安装）
+- references/walkthroughs.md — 公众号 / 正式纪要 / 批量门禁三类复杂走查
+
+## 常见问题（速查）
+
+文本传不进去、改写变化不大、触发不灵、安装不上时，先看 references/faq.md。
 
 ## 责任声明
 

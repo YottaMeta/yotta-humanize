@@ -1,3 +1,9 @@
+## v0.2.0 (2026-09-09)
+
+- 评测完善批 2：FAQ 补速查索引、触发说明与安装排障；新增 references/walkthroughs.md（公众号/正式纪要/批量门禁三类复杂走查）。
+- 安装器错误处理：用法/目标/安装错误统一退出码与修复建议；新增 test/install.test.js。
+- package.json 补 npm test 脚本；版本对齐 0.2.0（package / SKILL / CHANGELOG / CLI）。
+
 ## v0.1.3 (2026-09-01)
 
 评测反馈优化（文档 + 错误提示，功能不变）。
