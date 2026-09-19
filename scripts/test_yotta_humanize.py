@@ -178,6 +178,22 @@ def test_cli():
     check("score 文本输出为数字", r.returncode == 0 and r.stdout.strip().isdigit(),
           "rc=%d out=%r" % (r.returncode, r.stdout))
 
+    # 位置参数直接传文本（v0.2.1 回归：_read_text 曾把 args.text 列表原样返回）
+    r = _run(["score", ai])
+    check("score 位置参数直接传文本",
+          r.returncode == 0 and r.stdout.strip().isdigit(),
+          "rc=%d out=%r err=%r" % (r.returncode, r.stdout[:60], r.stderr[:80]))
+
+    r = _run(["rewrite", ai])
+    check("rewrite 位置参数直接传文本",
+          r.returncode == 0 and "改写后评分" in r.stdout,
+          "rc=%d err=%r" % (r.returncode, r.stderr[:80]))
+
+    r = _run(["score", "众所周知，", "未来可期。"])
+    check("score 多词位置参数按空格拼接",
+          r.returncode == 0 and r.stdout.strip().isdigit(),
+          "rc=%d out=%r err=%r" % (r.returncode, r.stdout[:60], r.stderr[:80]))
+
     r = _run(["score", "--gate", "--threshold", "1"], inp=ai)
     check("score --gate 高分退出码 1", r.returncode == 1, "rc=%d" % r.returncode)
 

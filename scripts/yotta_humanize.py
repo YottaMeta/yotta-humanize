@@ -47,7 +47,7 @@ _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 import humanize_rules as HR  # noqa: E402
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 TOOL_NAME = "yotta-humanize"
 TOOL_CN = "元真"
 DEFAULT_THRESHOLD = 45
@@ -525,7 +525,7 @@ def _read_text(args):
     if getattr(args, "stdin", False):
         return _read_stdin()
     if getattr(args, "text", None):
-        return args.text
+        return " ".join(args.text)
     if not sys.stdin.isatty():
         return _read_stdin()
     raise SystemExit("缺少输入：用 -f 指定文件、--stdin 读管道，或直接传文本参数。")

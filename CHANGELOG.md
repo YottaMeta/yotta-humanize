@@ -1,3 +1,8 @@
+## v0.2.1 (2026-09-19)
+
+- 修复：`score` / `analyze` / `report` / `suggest` / `rewrite` 以位置参数直接传文本时报 `expected string or bytes-like object, got 'list'`（`_read_text` 把文本列表原样返回，未拼接）；`-f` / `--stdin` 路径不受影响。
+- 补回归测试：位置参数单文本 / 多词拼接共 3 项（修复前复现红，修复后全量 158/158 通过）。
+
 ## v0.2.0 (2026-09-09)
 
 - 评测完善批 2：FAQ 补速查索引、触发说明与安装排障；新增 references/walkthroughs.md（公众号/正式纪要/批量门禁三类复杂走查）。
