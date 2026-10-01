@@ -1,97 +1,92 @@
 #!/usr/bin/env node
 /**
- * @yottameta/yotta-humanize cross-platform installer.
+ * yotta-humanize 跨平台安装器（YottaSkills）
  *
- * Usage:
- *   npx -y @yottameta/yotta-humanize --agent <name>
- *   npx -y @yottameta/yotta-humanize --dir <path>
- *   npx -y @yottameta/yotta-humanize -g
- *   npx -y @yottameta/yotta-humanize
- *   npx -y @yottameta/yotta-humanize --list
+ * 用法:
+ *   npx -y @yottameta/yotta-humanize --agent <name>   # 按智能体默认用户级目录安装（推荐）
+ *   npx -y @yottameta/yotta-humanize --dir <path>     # 装到指定目录（用户改了目录的智能体）
+ *   npx -y @yottameta/yotta-humanize -g               # 安装到全部已知智能体用户级目录
+ *   npx -y @yottameta/yotta-humanize                  # 安装到检测到的项目级目录
+ *   npx -y @yottameta/yotta-humanize --list           # 列出智能体 -> 默认目录
+ *   npx -y @yottameta/yotta-humanize --dry-run        # 只显示将写入的目标，不写文件
+ *   npx -y @yottameta/yotta-humanize --version        # 显示版本
+ *   npx -y @yottameta/yotta-humanize --help           # 显示帮助
+ *
+ * 退出码: 0 成功 / 1 安装失败 / 2 用法错误 / 4 目标错误
  */
 'use strict';
-
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
 const SKILL_NAME = 'yotta-humanize';
 const PKG_ROOT = path.join(__dirname, '..');
-const COPY_SKIP = new Set(['package.json', 'bin', 'node_modules', '.git', '.github', 'test']);
 
-const AGENT_DIRS = {
-  claude:    { label: 'Claude Code',      dirs: ['.claude/skills'] },
-  cursor:    { label: 'Cursor',           dirs: ['.cursor/skills', '.agents/skills'] },
-  codex:     { label: 'Codex',            dirs: ['.codex/skills'] },
-  gemini:    { label: 'Gemini CLI',       dirs: ['.gemini/skills', '.agents/skills'] },
-  goose:     { label: 'Goose',            dirs: ['.config/goose/skills', '.agents/skills'] },
-  amp:       { label: 'Amp',              dirs: ['.config/agents/skills', '.agents/skills'] },
-  opencode:  { label: 'OpenCode',         dirs: ['.config/opencode/skills'] },
-  windsurf:  { label: 'Windsurf',         dirs: ['.codeium/windsurf/skills'] },
-  workbuddy: { label: 'WorkBuddy',        dirs: ['.workbuddy/skills'] },
-  kiro:      { label: 'Kiro',             dirs: ['.kiro/skills'] },
-  trae:      { label: 'Trae Code CLI',    dirs: ['.traecli/skills'] },
-  'trae-cn': { label: 'Trae IDE',         dirs: ['.trae-cn/skills'] },
-  qwen:      { label: 'Qwen Code',        dirs: ['.qwen/skills'] },
-  comate:    { label: 'Comate',           dirs: ['.comate/skills'] },
-  codebuddy: { label: 'CodeBuddy Code',   dirs: ['.codebuddy/skills'] },
-  kimi:      { label: 'Kimi Code CLI',    dirs: ['.kimi/skills'] },
-  agents:    { label: 'Generic AGENTS.md', dirs: ['.agents/skills'] },
-};
+// 顶层开发文件 / 目录：只在安装包顶层跳过；技能包内嵌套同名载荷必须保留。
+// 与 install.sh 同口径：开发件与运行时不相关目录一律不落目标。
+const TOP_SKIP = [
+  'package.json', 'package-lock.json', 'bin', 'lib', 'test',
+  '.github', '.git', '.gitignore', '.npmignore', '.gitattributes',
+  '.yotta', '.tmp', 'install.sh', 'node_modules',
+];
+const TOP_SKIP_SET = new Set(TOP_SKIP);
+// 缓存 / 编译产物：任意层级跳过，安装时同样清理。
+const CACHE_DIRS = new Set(['__pycache__', '.pytest_cache', '.mypy_cache']);
 
 class UsageError extends Error {}
 class TargetError extends Error {}
 class InstallError extends Error {}
 
-function usage() {
-  console.log('yotta-humanize installer');
-  console.log('');
-  console.log('Usage:');
-  console.log('  npx -y @yottameta/yotta-humanize --agent <name>  Install to an agent default directory');
-  console.log('  npx -y @yottameta/yotta-humanize --dir <path>     Install to a custom directory');
-  console.log('  npx -y @yottameta/yotta-humanize -g               Install to all known agent directories');
-  console.log('  npx -y @yottameta/yotta-humanize                  Auto-detect project-level directories');
-  console.log('  npx -y @yottameta/yotta-humanize --list           List supported agent directories');
-  console.log('');
-  console.log('Options:');
-  console.log('  --agent <name>  Agent key, see --list');
-  console.log('  --dir <path>    Custom skills directory');
-  console.log('  -g, --global    Install to all known user-level directories');
-  console.log('  --list, -l      List supported agents');
-  console.log('  -h, --help      Show this help');
-}
+// 智能体 -> 用户级默认技能目录（dirs 按优先级排列；--agent 装到第一个）
+// 依据官方文档：.agents/skills 并非通用目录，被 OpenCode / Cursor / Cline / Amp /
+// Kimi / Gemini CLI / GitHub Copilot 等读取；Claude Code 与 Codex 默认不读 .agents。
+const AGENT_DIRS = {
+  claude:    { label: 'Claude Code',      dirs: ['.claude/skills'] },
+  cursor:    { label: 'Cursor',           dirs: ['.cursor/skills', '.agents/skills'] },
+  codex:     { label: 'Codex',            dirs: ['.codex/skills'] }, // 特判：$CODEX_HOME/skills
+  gemini:    { label: 'Gemini CLI',       dirs: ['.gemini/skills', '.agents/skills'] },
+  goose:     { label: 'Goose',            dirs: ['.config/goose/skills', '.agents/skills'] },
+  amp:       { label: 'Amp',              dirs: ['.config/agents/skills', '.agents/skills'] },
+  opencode:  { label: 'OpenCode',         dirs: ['.config/opencode/skills'] }, // 特判：$XDG_CONFIG_HOME
+  windsurf:  { label: 'Windsurf',         dirs: ['.codeium/windsurf/skills'] },
+  workbuddy: { label: 'WorkBuddy',        dirs: ['.workbuddy/skills'] },
+  kiro:      { label: 'Kiro',             dirs: ['.kiro/skills'] },
+  trae:      { label: 'Trae Code CLI',    dirs: ['.traecli/skills'] },
+  'trae-cn': { label: 'Trae IDE（国内）',  dirs: ['.trae-cn/skills'] },
+  qwen:      { label: 'Qwen Code',        dirs: ['.qwen/skills'] },
+  comate:    { label: 'Comate 文心快码',   dirs: ['.comate/skills'] },
+  codebuddy: { label: 'CodeBuddy Code',   dirs: ['.codebuddy/skills'] },
+  kimi:      { label: 'Kimi Code CLI',    dirs: ['.kimi/skills'] },
+  agents:    { label: '通用 AGENTS.md',    dirs: ['.agents/skills'] },
+};
 
-function parseArgs(argv) {
-  const opts = { help: false, list: false, global: false, dir: null, agent: null };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--help' || arg === '-h') opts.help = true;
-    else if (arg === '--list' || arg === '-l') opts.list = true;
-    else if (arg === '--global' || arg === '-g') opts.global = true;
-    else if (arg === '--dir') {
-      const value = argv[++i];
-      if (!value) throw new UsageError('--dir requires a non-empty path');
-      opts.dir = value;
-    } else if (arg === '--agent') {
-      const value = argv[++i];
-      if (!value) throw new UsageError('--agent requires a non-empty name');
-      opts.agent = value.toLowerCase();
-    } else {
-      throw new UsageError('Unknown argument: ' + arg);
-    }
-  }
-  if (!opts.help) {
-    const selected = [opts.dir, opts.agent, opts.global].filter(Boolean).length;
-    if (selected > 1) throw new UsageError('Use only one of --dir, --agent, or -g');
-  }
-  return opts;
-}
+const PROJECT_DIRS = [
+  '.claude/skills',
+  '.cursor/skills',
+  '.codex/skills',
+  '.config/goose/skills',
+  '.config/agents/skills',
+  '.opencode/skills',
+  '.codeium/windsurf/skills',
+  '.workbuddy/skills',
+  '.kiro/skills',
+  '.traecli/skills',
+  '.gemini/skills',
+  '.trae-cn/skills',
+  '.qwen/skills',
+  '.comate/skills',
+  '.codebuddy/skills',
+  '.kimi/skills',
+  '.agents/skills',
+];
 
+// Codex 用户级目录特判：优先 $CODEX_HOME/skills，否则 ~/.codex/skills
 function codexUserDir() {
   const base = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
   return path.join(base, 'skills');
 }
 
+// OpenCode 用户级目录特判：优先 $XDG_CONFIG_HOME/opencode/skills，否则 ~/.config/opencode/skills
 function opencodeUserDir() {
   const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
   return path.join(base, 'opencode', 'skills');
@@ -108,116 +103,212 @@ function displayDir(rel) {
   return '~/' + rel;
 }
 
-function printList() {
-  console.log('Agent -> default skill directory:');
-  for (const [key, value] of Object.entries(AGENT_DIRS)) {
-    console.log('  ' + key.padEnd(12) + value.label.padEnd(20) + value.dirs.map(displayDir).join(', '));
+function skillVersion() {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8'));
+    return data.version || null;
+  } catch (_) {
+    return null;
   }
+}
+
+function usage() {
+  console.log(SKILL_NAME + ' 安装器（YottaSkills）');
   console.log('');
-  console.log('Use --dir <path> for agents not listed. CODEX_HOME and XDG_CONFIG_HOME are respected.');
+  console.log('用法:');
+  console.log('  node bin/install.js --agent <name>   按智能体默认用户级目录安装（推荐）');
+  console.log('  node bin/install.js --dir <path>     装到指定目录（用户改了目录的智能体）');
+  console.log('  node bin/install.js -g               安装到全部已知智能体用户级目录');
+  console.log('  node bin/install.js                  安装到检测到的项目级目录');
+  console.log('');
+  console.log('参数:');
+  console.log('  --agent <name>  智能体键名，见 --list');
+  console.log('  --dir <path>    自定义技能目录');
+  console.log('  -g, --global    安装到全部已知用户级目录');
+  console.log('  --list, -l      列出支持的智能体目录');
+  console.log('  --dry-run       只显示将写入的目标，不写文件');
+  console.log('  --version, -v   显示版本');
+  console.log('  --help, -h      显示帮助');
+  console.log('  --yes, -y       兼容参数（-g 不再强制要求）');
+  console.log('');
+  console.log('退出码: 0 成功 / 1 安装失败 / 2 用法错误 / 4 目标错误');
+}
+
+function parseArgs(argv) {
+  const opts = { help: false, version: false, list: false, global: false, dryRun: false, yes: false, dir: null, agent: null };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--help' || arg === '-h') opts.help = true;
+    else if (arg === '--version' || arg === '-v') opts.version = true;
+    else if (arg === '--list' || arg === '-l') opts.list = true;
+    else if (arg === '--global' || arg === '-g') opts.global = true;
+    else if (arg === '--dry-run') opts.dryRun = true;
+    else if (arg === '--yes' || arg === '-y') opts.yes = true;
+    else if (arg === '--dir') {
+      const value = argv[++i];
+      if (!value) throw new UsageError('--dir 需要一个非空路径');
+      opts.dir = value;
+    } else if (arg === '--agent') {
+      const value = argv[++i];
+      if (!value) throw new UsageError('--agent 需要一个非空名称');
+      opts.agent = String(value).toLowerCase();
+    } else {
+      throw new UsageError('未知参数: ' + arg);
+    }
+  }
+  if (!opts.help && !opts.version) {
+    const selected = [opts.dir, opts.agent, opts.global].filter(Boolean).length;
+    if (selected > 1) throw new UsageError('--dir / --agent / -g 只能选一个');
+  }
+  return opts;
+}
+
+function printList() {
+  console.log('智能体 -> 默认技能目录（--agent <name> 装到第一个，用户级）:');
+  for (const [key, value] of Object.entries(AGENT_DIRS)) {
+    const resolved = value.dirs.map(displayDir);
+    console.log('  ' + key.padEnd(10) + value.label.padEnd(18) + resolved.join('、'));
+  }
+  console.log('\n说明：Windows 用 %USERPROFILE%，Linux/macOS 用 ~；仅收录有官方默认目录的智能体。');
+  console.log('改了目录的请用 --dir <路径>，不要依赖默认位置；若设置了 CODEX_HOME / XDG_CONFIG_HOME，安装自动以该变量为准。');
 }
 
 function assertSafeTarget(target) {
   const rel = path.relative(PKG_ROOT, target);
   if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
-    throw new UsageError('Target directory must be outside the skill source directory');
+    throw new UsageError('目标目录不能在技能源目录内（防止自装自毁）');
   }
 }
 
-function copyDir(src, dst, skip) {
+function shouldSkipCache(name, isFile) {
+  if (CACHE_DIRS.has(name)) return true;
+  if (isFile && (name.endsWith('.pyc') || name.endsWith('.pyo'))) return true;
+  return false;
+}
+
+function copyDir(src, dst, topLevel) {
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    if (skip.has(entry.name)) continue;
-    const from = path.join(src, entry.name);
-    const to = path.join(dst, entry.name);
-    try {
-      if (entry.isDirectory()) {
-        fs.mkdirSync(to, { recursive: true });
-        copyDir(from, to, skip);
-      } else if (entry.isFile()) {
-        fs.copyFileSync(from, to);
-      }
-    } catch (err) {
-      throw new InstallError('Failed to copy ' + from + ' -> ' + to + ': ' + err.message);
+    // 只跳过安装包顶层开发文件；template/ 等嵌套同名载荷必须保留。
+    if (topLevel && TOP_SKIP_SET.has(entry.name)) continue;
+    if (shouldSkipCache(entry.name, entry.isFile())) continue;
+    const s = path.join(src, entry.name);
+    const d = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(d, { recursive: true });
+      copyDir(s, d, false);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(s, d);
     }
   }
 }
 
-function installTo(dest) {
-  if (!dest || typeof dest !== 'string') throw new UsageError('Destination directory is required');
+// 清理旧版安装残留（fail-closed 白名单）：
+// 仅在目标目录已存在且含 SKILL.md 时触发；只删顶层开发项 + 任意层级缓存；
+// 不整目录删除、不跟随符号链接。
+function cleanResidue(target) {
+  const removed = [];
+  let stat = null;
+  try { stat = fs.statSync(target); } catch (_) { return removed; }
+  if (!stat.isDirectory()) return removed;
+  if (!fs.existsSync(path.join(target, 'SKILL.md'))) return removed;
+  for (const name of TOP_SKIP) {
+    const p = path.join(target, name);
+    let entry = null;
+    try { entry = fs.lstatSync(p); } catch (_) { continue; }
+    if (entry.isSymbolicLink()) continue;
+    fs.rmSync(p, { recursive: true, force: true });
+    removed.push(name);
+  }
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        if (CACHE_DIRS.has(entry.name)) {
+          fs.rmSync(p, { recursive: true, force: true });
+          removed.push(path.relative(target, p));
+        } else {
+          walk(p);
+        }
+      } else if (entry.isFile() && (entry.name.endsWith('.pyc') || entry.name.endsWith('.pyo'))) {
+        fs.unlinkSync(p);
+        removed.push(path.relative(target, p));
+      }
+    }
+  };
+  walk(target);
+  return removed;
+}
+
+function installTo(dest, opts) {
+  if (!dest || typeof dest !== 'string') throw new UsageError('目标目录不能为空');
   const target = path.resolve(dest, SKILL_NAME);
   assertSafeTarget(target);
+  if (opts.dryRun) {
+    console.log('[dry-run] 将安装到 -> ' + target);
+    return target;
+  }
   try {
+    for (const rel of cleanResidue(target)) console.log('已清理残留: ' + rel);
     fs.mkdirSync(target, { recursive: true });
-    copyDir(PKG_ROOT, target, COPY_SKIP);
+    copyDir(PKG_ROOT, target, true);
     if (!fs.existsSync(path.join(target, 'SKILL.md'))) {
-      throw new InstallError('Installed directory is missing SKILL.md');
+      throw new InstallError('安装结果缺少 SKILL.md');
     }
   } catch (err) {
-    if (err instanceof UsageError || err instanceof InstallError) throw err;
-    throw new InstallError('Cannot install to ' + target + ': ' + err.message);
+    if (err instanceof UsageError || err instanceof TargetError || err instanceof InstallError) throw err;
+    throw new InstallError('安装到 ' + target + ' 失败: ' + err.message);
   }
   console.log('installed -> ' + target);
   return target;
 }
 
-function projectDirs() {
-  return [
-    '.claude/skills',
-    '.cursor/skills',
-    '.codex/skills',
-    '.config/goose/skills',
-    '.config/agents/skills',
-    '.opencode/skills',
-    '.codeium/windsurf/skills',
-    '.workbuddy/skills',
-    '.kiro/skills',
-    '.traecli/skills',
-    '.gemini/skills',
-    '.trae-cn/skills',
-    '.qwen/skills',
-    '.comate/skills',
-    '.codebuddy/skills',
-    '.kimi/skills',
-    '.agents/skills',
-  ].filter((dir) => fs.existsSync(dir));
-}
-
 function run() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) { usage(); return; }
+  if (opts.version) {
+    const version = skillVersion();
+    if (!version) {
+      console.error(SKILL_NAME + ' 版本未知（未找到 package.json）');
+      process.exitCode = 1;
+      return;
+    }
+    console.log(SKILL_NAME + ' v' + version);
+    return;
+  }
   if (opts.list) { printList(); return; }
 
-  if (opts.dir) { installTo(opts.dir); return; }
+  if (opts.dir) { installTo(opts.dir, opts); return; }
 
   if (opts.agent) {
     const info = AGENT_DIRS[opts.agent];
     if (!info) {
-      throw new UsageError('Unknown agent: ' + opts.agent + '. Available: ' + Object.keys(AGENT_DIRS).join(', ') + '. Use --dir for a custom directory.');
+      throw new UsageError('未收录智能体: ' + opts.agent + '。可用: ' + Object.keys(AGENT_DIRS).join(', ') + '；自定义目录请用 --dir <路径>。');
     }
-    installTo(resolveUserDir(info.dirs[0]));
+    installTo(resolveUserDir(info.dirs[0]), opts);
+    console.log('完成。');
     return;
   }
 
   if (opts.global) {
     const seen = new Set();
-    let count = 0;
     for (const value of Object.values(AGENT_DIRS)) {
-      for (const dir of value.dirs) {
-        if (seen.has(dir)) continue;
-        seen.add(dir);
-        installTo(resolveUserDir(dir));
-        count++;
+      for (const rel of value.dirs) {
+        if (seen.has(rel)) continue;
+        seen.add(rel);
+        installTo(resolveUserDir(rel), opts);
       }
     }
-    console.log('Installed to ' + count + ' directories.');
+    if (!opts.dryRun) console.log('完成。');
     return;
   }
 
-  const dirs = projectDirs();
+  const dirs = PROJECT_DIRS.filter((d) => fs.existsSync(d));
   if (!dirs.length) {
-    throw new TargetError('No project-level agent directory detected. Use --agent <name> or --dir <path>.');
+    throw new TargetError('未检测到项目级智能体目录。可用 --agent <name> 装到用户级，或用 --dir <路径> 指定目录。');
   }
-  for (const dir of dirs) installTo(dir);
+  for (const dir of dirs) installTo(dir, opts);
+  if (!opts.dryRun) console.log('完成。');
 }
 
 function main() {
@@ -225,18 +316,18 @@ function main() {
     run();
   } catch (err) {
     if (err instanceof UsageError) {
-      console.error('Usage error: ' + err.message);
+      console.error('用法错误: ' + err.message);
       usage();
       process.exitCode = 2;
     } else if (err instanceof TargetError) {
-      console.error('Target error: ' + err.message);
+      console.error('目标错误: ' + err.message);
       process.exitCode = 4;
     } else if (err instanceof InstallError) {
-      console.error('Install failed: ' + err.message);
-      console.error('Fix: check directory permissions and free space, then retry. Use --dir to choose another directory.');
+      console.error('安装失败: ' + err.message);
+      console.error('修复建议: 检查目录权限与磁盘空间后重试，或用 --dir 换一个目录。');
       process.exitCode = 1;
     } else {
-      console.error('Unexpected error: ' + (err && err.message ? err.message : String(err)));
+      console.error('未知错误: ' + (err && err.message ? err.message : String(err)));
       process.exitCode = 1;
     }
   }

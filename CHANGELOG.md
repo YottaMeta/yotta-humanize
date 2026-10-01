@@ -1,3 +1,8 @@
+## v0.2.2 (2026-10-01)
+
+- 安装器卫生批次：`bin/install.js` / `install.sh` 统一（未知参数报错 exit 2、`--help` / `--version`、残留清理白名单、嵌套载荷保留）；由模板单一真源渲染，接入漂移门禁。
+- 自带安装器测试（`test/install.test.js`）更新为统一行为断言。
+
 ## v0.2.1 (2026-09-19)
 
 - 修复：`score` / `analyze` / `report` / `suggest` / `rewrite` 以位置参数直接传文本时报 `expected string or bytes-like object, got 'list'`（`_read_text` 把文本列表原样返回，未拼接）；`-f` / `--stdin` 路径不受影响。
