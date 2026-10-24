@@ -7,9 +7,9 @@
 
 <h1 align="center">yotta-humanize · 元真</h1>
 
-<p align="center">YottaMeta 自有的去 AI 味中文写作编辑技能：<b>检测器引擎（24 类规则 + 词表 + 统计突发性）</b>识别 AI 腔文本，并给出确定性改写，让中文写作更自然、更像人写的。适用于编辑 / 润色文本、给 AI 生成的中文稿件做检测与改写。</p>
-<p align="center">检测到空泛升华、套话、AI 黑话（赋能 / 闭环 / 抓手）、同义堆叠、排比三连、聊天残渣（希望对你有所帮助）等 AI 腔特征时自动激活——<b>不靠提示词兜底，按规则确定性判定</b>。</p>
-<p align="center">纯 Python 3.8+ 标准库实现，零外部依赖；Windows + Linux + macOS 通用；检测 + 改写全流程，改写不依赖模型。</p>
+<p align="center"><b>粘贴一段中文草稿，先看 AI 味评分，再改掉像机器写的句子。</b></p>
+<p align="center">元真用 <b>24 类规则 + 统计突发性</b>检查空泛升华、套话、AI 黑话、同义堆叠、机械排比、聊天残渣和标点滥用。</p>
+<p align="center">Python 3.8+ 标准库本地运行，不调用模型、不上传文本、不依赖外部服务。</p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue" /></a>
@@ -19,6 +19,42 @@
   <a href="https://github.com/YottaMeta/yotta-humanize/commits/main"><img alt="last commit" src="https://img.shields.io/github/last-commit/YottaMeta/yotta-humanize" /></a>
   <a href="https://github.com/YottaMeta/yotta-humanize"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" /></a>
 </p>
+
+## 两条真实案例
+
+> 以下均为 0.2.3 `rewrite` 的实际输出；分数是引擎的 0-100 AI 味评分。
+
+**1. 替换 AI 黑话**
+
+改写前：
+
+```text
+赋能业务增长，打造闭环生态，提升用户体验，实现价值最大化。
+```
+
+改写后：
+
+```text
+支持业务增长，打造流程生态，提升用户体验，实现价值最大化。
+```
+
+`46 -> 0`；修正：赋能 -> 支持，闭环 -> 流程。
+
+**2. 清理套话与聊天残渣**
+
+改写前：
+
+```text
+感谢你的提问。赋能业务增长，打造闭环生态，沉淀方法论，提升颗粒度。如果你有任何问题，随时告诉我。
+```
+
+改写后：
+
+```text
+支持业务增长，打造流程生态，积累方法，提升细致程度。
+```
+
+`52 -> 0`；共修正 8 处：AI 黑话 ×5、奉承 ×1、聊天残渣 ×2。
 
 ## 这是什么
 
@@ -136,21 +172,9 @@ bash install.sh --list           # 列出智能体 -> 默认目录
 4. 需要判断的部分（排比拆句、模糊归因补来源、绝对化软化）按 suggest 的建议手工润色。
 5. 改写完再 score 一次，确认评分下降、原意未破坏。
 
-## 效果展示（改写前后）
+## 改写输出
 
-**输入**（典型 AI 腔）：
-
-```text
-赋能业务增长，打造闭环生态，提升用户体验，实现价值最大化。
-```
-
-**输出**（`rewrite` 确定性改写，示意）：
-
-```text
-帮业务更快增长，把流程走通，让用户用得顺手，做出实实在在的价值。
-```
-
-改写前评分 68/100 → 改写后 23/100（AI 腔明显下降）；`rewrite` 会同时输出修复清单（改了什么、改了几处）。
+`rewrite` 会返回改写后文本、带规则编号的修复清单，以及改写前后评分。`--json` 返回 `{ text, fixes, before, after }`。上方案例都是当前引擎的确定性输出；需要判断的润色只给建议，不会自动强改。
 
 ## 错误处理
 
@@ -172,7 +196,7 @@ bash install.sh --list           # 列出智能体 -> 默认目录
 
 ## 开发与校验
 
-- 测试：python scripts/test_yotta_humanize.py（155 项）
+- 测试：python scripts/test_yotta_humanize.py（158 项）
 - 基础校验：python tools/validate-skill.py yotta-humanize（在仓库根目录运行）
 - 规则目录：references/patterns.md；评分公式：references/scoring.md；改写规则：references/rewriting.md
 

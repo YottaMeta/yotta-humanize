@@ -6,9 +6,9 @@
 
 <h1 align="center">yotta-humanize · 元真 (Yuanzhen)</h1>
 
-<p align="center">YottaMeta's AI-flavor remover for Chinese writing: a <b>detector engine (24 rule classes + wordlists + statistical burstiness)</b> that identifies AI-typical text and applies <b>deterministic rewrites</b> to make Chinese copy read more naturally, more like a human wrote it. Use it to edit / polish text or to detect and rewrite AI-generated Chinese drafts.</p>
-<p align="center">Activates when it detects AI-flavor patterns — empty uplift, clichés, AI jargon (赋能 / 闭环 / 抓手), synonym stacking, triple parallel constructions, chat residue (希望对你有所帮助) — <b>deterministic verdicts by rules, not prompt-engineering luck</b>.</p>
-<p align="center">Pure Python 3.8+ standard library, zero external dependencies; Windows + Linux + macOS; detection + rewriting in one flow, rewriting does not depend on any model.</p>
+<p align="center"><b>Paste a Chinese draft. Get an AI-flavor score. Rewrite the lines that sound machine-written.</b></p>
+<p align="center">Yuanzhen checks Chinese text for AI flavor with <b>24 rule classes plus statistical burstiness</b>, covering clichés, AI jargon, synonym stacking, mechanical parallelism, chat residue and punctuation abuse.</p>
+<p align="center">Runs locally on Python 3.8+ standard library. No model calls, no external services, no data upload.</p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue" /></a>
@@ -18,6 +18,42 @@
   <a href="https://github.com/YottaMeta/yotta-humanize/commits/main"><img alt="last commit" src="https://img.shields.io/github/last-commit/YottaMeta/yotta-humanize" /></a>
   <a href="https://github.com/YottaMeta/yotta-humanize"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" /></a>
 </p>
+
+## Two real examples
+
+> Actual output from `rewrite` in 0.2.3. Scores use the engine's 0-100 AI-flavor scale.
+
+**1. Replace AI jargon**
+
+Before:
+
+```text
+赋能业务增长，打造闭环生态，提升用户体验，实现价值最大化。
+```
+
+After:
+
+```text
+支持业务增长，打造流程生态，提升用户体验，实现价值最大化。
+```
+
+`46 -> 0`; fixed: 赋能 -> 支持, 闭环 -> 流程.
+
+**2. Remove boilerplate and chat residue**
+
+Before:
+
+```text
+感谢你的提问。赋能业务增长，打造闭环生态，沉淀方法论，提升颗粒度。如果你有任何问题，随时告诉我。
+```
+
+After:
+
+```text
+支持业务增长，打造流程生态，积累方法，提升细致程度。
+```
+
+`52 -> 0`; 8 items fixed: AI jargon ×5, flattery ×1, chat residue ×2.
 
 ## What it is
 
@@ -141,21 +177,9 @@ bash install.sh --list           # list agents -> default directories
 - **Rewrites are suggestions** — unambiguous transforms apply directly; judgment-heavy rewrites are listed as suggestions for the human to confirm.
 - **No model dependency** — deterministic rules only; results are reproducible and explainable.
 
-## Before / after
+## Rewrite output
 
-**Input** (typical AI-flavored Chinese):
-
-```text
-赋能业务增长，打造闭环生态，提升用户体验，实现价值最大化。
-```
-
-**Output** (deterministic `rewrite`, illustrative):
-
-```text
-帮业务更快增长，把流程走通，让用户用得顺手，做出实实在在的价值。
-```
-
-Score before 68/100 → after 23/100; `rewrite` also prints a fix list (what changed and how many times).
+`rewrite` returns the rewritten text, a fix list with rule IDs and a before / after score. `--json` returns `{ text, fixes, before, after }`. The examples above are deterministic output; judgment-heavy changes are listed as suggestions instead of being applied automatically.
 
 ## Errors
 
@@ -177,7 +201,7 @@ Score before 68/100 → after 23/100; `rewrite` also prints a fix list (what cha
 
 ## Development & validation
 
-- Tests: python scripts/test_yotta_humanize.py (155 tests; Windows: python)
+- Tests: python scripts/test_yotta_humanize.py (158 tests; Windows: python)
 - Base validation: python tools/validate-skill.py yotta-humanize (run at the repo root)
 - Rule catalog: references/patterns.md; scoring formula: references/scoring.md; rewriting rules: references/rewriting.md
 
