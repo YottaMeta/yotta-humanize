@@ -21,7 +21,7 @@
 
 ## Two real examples
 
-> Actual output from `rewrite` in 0.2.3. Scores use the engine's 0-100 AI-flavor scale.
+> Actual output from `rewrite` in 0.2.4. Scores use the engine's 0-100 AI-flavor scale.
 
 **1. Replace AI jargon**
 
